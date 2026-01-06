@@ -1,0 +1,53 @@
+name: Read repo custom properties
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  read-custom-properties:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read actions_greeting custom property
+        uses: actions/github-script@v7
+        id: props
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const res = await github.request('GET /repos/{owner}/{repo}/properties/values', {
+              owner,
+              repo,
+              headers: {
+                accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+            });
+
+            const props = Array.isArray(res.data) ? res.data : [];
+            const greeting = props.find(p => p.property_name === 'actions_greeting')?.value;
+
+            if (greeting === undefined || greeting === null || greeting === '') {
+              core.setFailed(
+                'Custom property "actions_greeting" was not found (or is empty). ' +
+                'Set it on the repository and try again.'
+              );
+              return;
+            }
+
+            core.setOutput('actions_greeting', greeting);
+            core.info(`actions_greeting: ${greeting}`);
+
+      - name: Show greeting (from output)
+        run: echo "actions_greeting=${{ steps.props.outputs.actions_greeting }}"
+
+      - name: Add greeting to job summary
+        run: |
+          {
+            echo "### Repository custom property"
+            echo ""
+            echo "- \`actions_greeting\`: **${{ steps.props.outputs.actions_greeting }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
